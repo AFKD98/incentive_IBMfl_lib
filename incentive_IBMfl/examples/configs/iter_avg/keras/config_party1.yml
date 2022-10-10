@@ -1,0 +1,31 @@
+aggregator:
+  ip: 127.0.0.1
+  port: 5000
+connection:
+  info:
+    ip: 127.0.0.1
+    port: 8086
+    tls_config:
+      enable: false
+  name: FlaskConnection
+  path: ibmfl.connection.flask_connection
+  sync: false
+data:
+  info:
+    npz_file: examples/data/mnist/random/data_party1.npz
+  name: MnistKerasDataHandler
+  path: ibmfl.util.data_handlers.mnist_keras_data_handler
+local_training:
+  name: TierLocalTrainingHandler
+  path: ibmfl.party.training.tier_local_training_handler
+model:
+  name: KerasFLModel
+  path: ibmfl.model.keras_fl_model
+  spec:
+    model_definition: examples/configs/iter_avg/keras/compiled_keras.h5
+    model_name: keras-cnn
+privacy:
+  metrics: true
+protocol_handler:
+  name: PartyProtocolHandler
+  path: ibmfl.party.party_protocol_handler

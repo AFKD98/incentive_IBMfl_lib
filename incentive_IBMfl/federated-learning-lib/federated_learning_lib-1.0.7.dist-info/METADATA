@@ -1,0 +1,56 @@
+Metadata-Version: 2.1
+Name: federated-learning-lib
+Version: 1.0.7
+Summary: Library for Federated Learning.
+Home-page: https://github.com/IBM/federated-learning
+Author: IBM
+Author-email: hludwig@us.ibm.com
+License: IBM non-commercial license
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Requires-Dist: diffprivlib (>=0.4.0)
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: pytest
+Requires-Dist: PyYAML
+Requires-Dist: parse
+Requires-Dist: Flask
+Requires-Dist: jsonpickle
+Requires-Dist: requests
+Requires-Dist: scipy (==1.4.1)
+Requires-Dist: environs
+Requires-Dist: pathlib2
+Requires-Dist: skorch
+Requires-Dist: pillow
+Requires-Dist: aif360 (==0.3.0)
+Requires-Dist: scikit-learn (==0.23.1)
+Requires-Dist: keras (==2.2.4)
+Requires-Dist: h5py (==2.10.0)
+Requires-Dist: torch (==1.4.0)
+Requires-Dist: torchvision (==0.5.0)
+Requires-Dist: gym (==0.19.0)
+Requires-Dist: psutil
+Requires-Dist: setproctitle
+Requires-Dist: tabulate
+Requires-Dist: lz4
+Requires-Dist: opencv-python
+Requires-Dist: dm-tree
+Requires-Dist: dataclasses
+Requires-Dist: ray
+Requires-Dist: gensim (==3.8.3)
+Requires-Dist: tqdm (>=4.32.0)
+Requires-Dist: GPUtil
+Requires-Dist: cloudpickle (==1.3.0)
+Requires-Dist: fairlearn
+Requires-Dist: pycloudmessenger @ http://github.com/IBM/pycloudmessenger/archive/v0.8.0.tar.gz
+
+"""
+Licensed Materials - Property of IBM
+Restricted Materials of IBM
+20190891
+© Copyright IBM Corp. 2021 All Rights Reserved.
+"""
+
+

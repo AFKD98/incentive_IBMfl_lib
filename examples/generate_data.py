@@ -3,6 +3,7 @@ import os
 import sys
 import csv
 import time
+import copy
 import torch
 import argparse
 import numpy as np
@@ -18,7 +19,7 @@ from ibmfl.util.datasets import load_nursery, load_mnist, load_adult, load_compa
     load_higgs, load_airline, load_diabetes, load_binovf, load_multovf, load_linovf, \
     load_simulated_federated_clustering, load_leaf_femnist, load_cifar10, load_wikipedia
 from examples.constants import GENERATE_DATA_DESC, NUM_PARTIES_DESC, DATASET_DESC, PATH_DESC, PER_PARTY, \
-    STRATIFY_DESC, FL_DATASETS, NEW_DESC, PER_PARTY_ERR, NAME_DESC
+    STRATIFY_DESC, FL_DATASETS, NEW_DESC, PER_PARTY_ERR, NAME_DESC, DATASET_DIST
 
 
 def setup_parser():
@@ -39,6 +40,11 @@ def setup_parser():
     p.add_argument("--stratify", "-s", help=STRATIFY_DESC, action="store_true")
     p.add_argument("--create_new", "-new", action="store_true", help=NEW_DESC)
     p.add_argument("--name", help=NAME_DESC)
+    # To modify dataset distribution to non-iid, please use command like: -dd non-iid-d-2
+    # d represents dirichlet
+    # 2 represents the variable that controls the data heterogeneity, smaller
+    # means higher data heterogeneity
+    p.add_argument("--data_distribution", "-dd", help=DATASET_DIST)
     return p
 
 
@@ -236,7 +242,7 @@ def save_compas_party_data(nb_dp_per_party, should_stratify, party_folder, datas
 
     print('Finished! :) Data saved in', party_folder)
 
-def save_cifar10_party_data(nb_dp_per_party, should_stratify, party_folder, dataset_folder):
+def save_cifar10_party_data(nb_dp_per_party, should_stratify, party_folder, dataset_folder, data_distribution):
     """
     Saves Cifar10 party data
 
@@ -248,6 +254,8 @@ def save_cifar10_party_data(nb_dp_per_party, should_stratify, party_folder, data
     :type party_folder: `str`
     :param dataset_folder: folder to save dataset
     :type dataset_folder: `str`
+    :param data_distribution: data distribution type
+    :type data_distribution: `str`
     """
     if not os.path.exists(dataset_folder):
         os.makedirs(dataset_folder)
@@ -273,13 +281,20 @@ def save_cifar10_party_data(nb_dp_per_party, should_stratify, party_folder, data
         train_probs = {label: 1.0 / len(labels) for label in labels}
         test_probs = {label: 1.0 / len(te_labels) for label in te_labels}
 
-    dirchilet = False
-    if dirchilet:
-        data_split = dirchilet_non_iid(
-            nb_dp_per_party=nb_dp_per_party,
-            y_train=y_train,
-            unique_labels_num=num_labels
-        )
+    if 'non-iid' in data_distribution:
+        data_distribution_list = data_distribution.split('-')
+        data_distribution_mode = data_distribution_list[-2]
+        beta = float(data_distribution_list[-1])
+
+        if data_distribution_mode == 'd':
+            data_split = dirchilet_non_iid(
+                nb_dp_per_party=nb_dp_per_party,
+                y_train=copy.deepcopy(y_train),
+                unique_labels_num=num_labels,
+                beta=beta
+            )
+        else:
+            raise ValueError('wrong non-iid data distribution mode')
 
     for idx, dp in enumerate(nb_dp_per_party):
         train_p = np.array([train_probs[y_train[idx]]
@@ -294,7 +309,8 @@ def save_cifar10_party_data(nb_dp_per_party, should_stratify, party_folder, data
         test_indices = np.random.choice(
             num_test, int(num_test / nb_parties), p=test_p)
 
-        if dirchilet:
+        # handle non-iid distribution for training data
+        if 'non-iid' in data_distribution:
             train_indices = data_split[idx]
    
         x_train_pi = x_train[train_indices]
@@ -315,39 +331,59 @@ def save_cifar10_party_data(nb_dp_per_party, should_stratify, party_folder, data
 def dirchilet_non_iid(
     nb_dp_per_party,
     y_train,
-    unique_labels_num
+    unique_labels_num,
+    beta
 ):
+    
+    import torch
 
-    # placeholder, should be taken from the arguments
-    dirichlet_class_num = 5
-    if unique_labels_num < dirichlet_class_num:
+    if unique_labels_num < beta:
         raise ValueError('Please input correct dirichlet class number')
     
     num_party = len(nb_dp_per_party)
     num_train = np.shape(y_train)[0]
-
+    # y_train = torch.from_numpy(y_train)
     data_split = {}
-    dir = torch.distributions.dirichlet.Dirichlet(torch.tensor(dirichlet_class_num).repeat(num_party))
+    dir = torch.distributions.dirichlet.Dirichlet(torch.tensor(beta).repeat(num_party))
     min_size = 0
     required_min_size = 10
+
+    
 
     while min_size < required_min_size:
         data_split = [[] for _ in range(num_party)]
         for label_i in range(unique_labels_num):
-            selected_train_idx = torch.where(y_train == label_i)[0]
-            proportions = dir.sample()
-            proportions = torch.tensor(
+            '''
+            torch version
+            '''
+            # selected_train_idx = torch.where(y_train == label_i)[0]
+            # proportions = dir.sample()
+            # proportions = np.tensor(
+            #     [p * (len(data_split_idx) < (num_train / num_party)) for p, data_split_idx in zip(proportions, data_split)])
+            # proportions = proportions / proportions.sum()
+            # # torch.cumsum累加最后一个纬度去分index
+            # split_idx = (torch.cumsum(proportions, dim=-1) * len(selected_train_idx)).long().tolist()[:-1]
+            # split_idx = torch.tensor_split(selected_train_idx, split_idx)
+            # data_split = [data_split_idx + idx.tolist() for data_split_idx, idx in zip(data_split, split_idx)]
+
+            '''
+            np version
+            '''
+            selected_train_idx = np.where(y_train == label_i)[0]
+            proportions = dir.sample().numpy()
+            print(proportions)
+            proportions = np.array(
                 [p * (len(data_split_idx) < (num_train / num_party)) for p, data_split_idx in zip(proportions, data_split)])
             proportions = proportions / proportions.sum()
             # torch.cumsum累加最后一个纬度去分index
-            split_idx = (torch.cumsum(proportions, dim=-1) * len(selected_train_idx)).long().tolist()[:-1]
-            split_idx = torch.tensor_split(selected_train_idx, split_idx)
+            split_idx = (np.cumsum(proportions, axis=-1) * len(selected_train_idx)).astype(np.int64).tolist()[:-1]
+            split_idx = np.split(selected_train_idx, split_idx)
             data_split = [data_split_idx + idx.tolist() for data_split_idx, idx in zip(data_split, split_idx)]
         min_size = min([len(data_split_idx) for data_split_idx in data_split])
     data_split = {i: data_split[i] for i in range(num_party)}
     return data_split
 
-def save_mnist_party_data(nb_dp_per_party, should_stratify, party_folder, dataset_folder):
+def save_mnist_party_data(nb_dp_per_party, should_stratify, party_folder, dataset_folder, data_distribution):
     """
     Saves MNIST party data
 
@@ -386,6 +422,21 @@ def save_mnist_party_data(nb_dp_per_party, should_stratify, party_folder, datase
         train_probs = {label: 1.0 / len(labels) for label in labels}
         test_probs = {label: 1.0 / len(te_labels) for label in te_labels}
 
+    if 'non-iid' in data_distribution:
+        data_distribution_list = data_distribution.split('-')
+        data_distribution_mode = data_distribution_list[-2]
+        beta = float(data_distribution_list[-1])
+
+        if data_distribution_mode == 'd':
+            data_split = dirchilet_non_iid(
+                nb_dp_per_party=nb_dp_per_party,
+                y_train=y_train,
+                unique_labels_num=num_labels,
+                beta=beta
+            )
+        else:
+            raise ValueError('wrong non-iid data distribution mode')
+
     for idx, dp in enumerate(nb_dp_per_party):
         train_p = np.array([train_probs[y_train[idx]]
                             for idx in range(num_train)])
@@ -397,6 +448,10 @@ def save_mnist_party_data(nb_dp_per_party, should_stratify, party_folder, datase
         # Split test evenly
         test_indices = np.random.choice(
             num_test, int(num_test / nb_parties), p=test_p)
+
+        # handle non-iid distribution for training data
+        if 'non-iid' in data_distribution:
+            train_indices = data_split[idx]
 
         x_train_pi = x_train[train_indices]
         y_train_pi = y_train[train_indices]
@@ -962,6 +1017,7 @@ if __name__ == '__main__':
     stratify = args.stratify
     create_new = args.create_new
     exp_name = args.name
+    data_distribution = args.data_distribution
 
     # Check for errors
     if len(points_per_party) == 1:
@@ -1011,7 +1067,7 @@ if __name__ == '__main__':
     elif dataset == 'german':
         save_german_party_data(points_per_party, stratify, folder_party_data, folder_dataset)
     elif args.dataset == 'mnist':
-        save_mnist_party_data(points_per_party, stratify, folder_party_data, folder_dataset)
+        save_mnist_party_data(points_per_party, stratify, folder_party_data, folder_dataset, data_distribution)
     elif args.dataset == 'compas':
         save_compas_party_data(points_per_party, stratify, folder_party_data, folder_dataset)
     elif dataset == 'higgs':
@@ -1031,7 +1087,7 @@ if __name__ == '__main__':
     elif dataset == 'femnist':
         save_femnist_party_data(points_per_party, stratify, folder_party_data, folder_dataset)
     elif dataset == 'cifar10':
-        save_cifar10_party_data(points_per_party, stratify, folder_party_data, folder_dataset)
+        save_cifar10_party_data(points_per_party, stratify, folder_party_data, folder_dataset, data_distribution)
     elif dataset == 'wikipedia':
         save_wikipedia_party_data(points_per_party, folder_party_data, folder_dataset)
     else:

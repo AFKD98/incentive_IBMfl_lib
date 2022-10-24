@@ -15,6 +15,7 @@ model:
     model_definition: examples/configs/iter_avg/pytorch/pytorch_sequence.pt
     model_name: pytorch-nn
     optimizer: optim.Adadelta
+
 data:
   info:
     npz_file: examples/datasets/mnist.npz
@@ -26,13 +27,13 @@ fusion:
 hyperparams:
   global:
     max_timeout: 60
-    num_parties: 4
-    rounds: 20
+    num_parties: 2
+    rounds: 3
     termination_accuracy: 0.9
     tiers: 2
   local:
     training:
-      epochs: 10
+      epochs: 3
       lr: 1
 protocol_handler:
   name: ProtoHandler

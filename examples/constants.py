@@ -38,3 +38,5 @@ FL_MODELS = ["keras", "pytorch", "tf", "sklearn", "doc2vec", "None"]
 FL_CONN_TYPES = ["flask", "pubsub"]
 
 FL_CONTEXT = {'openshift':'openshift_fl.examples'}
+
+DATASET_DIST = "iid"

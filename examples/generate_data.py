@@ -281,7 +281,7 @@ def save_cifar10_party_data(nb_dp_per_party, should_stratify, party_folder, data
         train_probs = {label: 1.0 / len(labels) for label in labels}
         test_probs = {label: 1.0 / len(te_labels) for label in te_labels}
 
-    if 'non-iid' in data_distribution:
+    if data_distribution and 'non-iid' in data_distribution:
         data_distribution_list = data_distribution.split('-')
         data_distribution_mode = data_distribution_list[-2]
         beta = float(data_distribution_list[-1])
@@ -310,7 +310,7 @@ def save_cifar10_party_data(nb_dp_per_party, should_stratify, party_folder, data
             num_test, int(num_test / nb_parties), p=test_p)
 
         # handle non-iid distribution for training data
-        if 'non-iid' in data_distribution:
+        if data_distribution and 'non-iid' in data_distribution:
             train_indices = data_split[idx]
    
         x_train_pi = x_train[train_indices]
@@ -422,7 +422,8 @@ def save_mnist_party_data(nb_dp_per_party, should_stratify, party_folder, datase
         train_probs = {label: 1.0 / len(labels) for label in labels}
         test_probs = {label: 1.0 / len(te_labels) for label in te_labels}
 
-    if 'non-iid' in data_distribution:
+    print(f'data_distribution: {data_distribution}')
+    if data_distribution and 'non-iid' in data_distribution:
         data_distribution_list = data_distribution.split('-')
         data_distribution_mode = data_distribution_list[-2]
         beta = float(data_distribution_list[-1])
@@ -450,7 +451,7 @@ def save_mnist_party_data(nb_dp_per_party, should_stratify, party_folder, datase
             num_test, int(num_test / nb_parties), p=test_p)
 
         # handle non-iid distribution for training data
-        if 'non-iid' in data_distribution:
+        if data_distribution and 'non-iid' in data_distribution:
             train_indices = data_split[idx]
 
         x_train_pi = x_train[train_indices]
@@ -1018,7 +1019,7 @@ if __name__ == '__main__':
     create_new = args.create_new
     exp_name = args.name
     data_distribution = args.data_distribution
-
+    print(f'generate data argument: {args}')
     # Check for errors
     if len(points_per_party) == 1:
         points_per_party = [points_per_party[0] for _ in range(num_parties)]

@@ -7,6 +7,7 @@ Restricted Materials of IBM
 """
 Module to where fusion algorithms are implemented.
 """
+import copy
 import logging
 import numpy as np
 
@@ -46,6 +47,7 @@ class TierIterAvgFusionHandler(IterAvgFusionHandler):
                  protocol_handler,
                  data_handler=None,
                  fl_models=None,
+                 shapley_value_test_model=None,
                  **kwargs):
         """
         Initializes an IterAvgFusionHandler object with provided information,
@@ -82,8 +84,10 @@ class TierIterAvgFusionHandler(IterAvgFusionHandler):
             'termination_accuracy')
         self.current_tiers = self.params_global.get(
             'tiers')
+        self.shapley_value_test_model = shapley_value_test_model
         self.model_updates = []
         self.fl_models = fl_models
+        # print(f'fl_models: {fl_models}')
         for fl_model in fl_models:
             if fl_model and fl_model.is_fitted():
                 self.model_updates.append(fl_model.get_model_update())
@@ -325,55 +329,125 @@ class TierIterAvgFusionHandler(IterAvgFusionHandler):
                                                 str(updates_hashes).replace('\'', '"')))
 
             self.update_weights(lst_replies)
-
             # Update model if we are maintaining one
             for i in range(0, self.current_tiers):
                 if self.fl_models[i] is not None:
                     self.fl_models[i].update_model(ModelUpdate(weights=self.current_model_weights_per_tier[i]))
 
+            shapley_value_for_each_party = self.cal_shapley_value(lst_replies)
+            logger.info(f'shapley_value_for_each_party: {shapley_value_for_each_party}')
+
             self.curr_round += 1
             self.save_current_state()
     
     def cal_aggregation_weight(self, lst_parties):
+        '''
+        get aggregation weight for each tier
+        '''
         return 1 / len(lst_parties)
 
-    def cal_shapley_value(self, lst_model_updates):
+    def flatten_list_of_numpy(self, numpy_list):
+        """
+        flatten list of numpy to 1-dimensional numpy
+        """
+        temp_list = copy.deepcopy(numpy_list)
+        res = []
+
+        for item in temp_list:
+            res.append(item.ravel())
+        
+        return np.concatenate(res)
+
+    def get_gradient_on_test_data(self, aggregated_model_paramter):
+        """
+        Evaluate the local model based on the local test data.
+
+        :param aggregated_model_paramter: parameter of aggregated_model. list of array
+        :type aggregated_model_paramter: `list`
+        :return: gradient of aggregated_model_paramter running on the aggregator test dataset. list of array
+        :rtype: `list`
+        """
+        self.shapley_value_test_model.update_model(
+            ModelUpdate(weights=aggregated_model_paramter)
+        )
+
+        (_), test_dataset = self.data_handler.get_data()
+        gradients = self.shapley_value_test_model.get_gradient(
+            train_data=test_dataset
+        )
+        return gradients
+        
+
+    def cal_shapley_value(self, lst_replies):
         """
         caculate shapley value for each party
-        : param: lst_model_updates: dict[tier_id, tuple(lst_model_updates, lst_parties)]
+        :param: lst_replies: info of parties update
+        :type lst_replies: `dict[tier_id, tuple(lst_model_updates, lst_parties)]`
+        :return: calculated shapley value for each party
+        :rtype: `dict[tier_id, dict[party_id, shapley value]]`
         """
         # 2-layer dict 
         # For the first layer: key is tier_id, value is a dict
         # For the second layer: key is party_id, value is the shapley value
         shapley_value_for_each_party= {tier_id: {} for tier_id in range(self.current_tiers)}
 
+        (_), test_dataset = self.data_handler.get_data()
+        test_data_points_num = len(test_dataset[0])
+
         # calculate shapley value   
         for tier_id in range(self.current_tiers):
-            # 1. get aggregated model parameter for each tier
+            # get aggregated model parameter for each tier
+            if tier_id >= len(self.current_model_weights_per_tier):
+                continue
             aggregated_model_paramter = self.current_model_weights_per_tier[tier_id]
+            # get gradient of tier aggregated model on aggregator test dataset
+            gradients = self.get_gradient_on_test_data(copy.deepcopy(aggregated_model_paramter))
 
-            # 2. calculate loss of each aggregated model running
-            # on the server test dataset
-            # TODO: running on test dataset
-            loss = None
+            # calculate shapley value for each client
+            # Note: using normalized aggregation since we delete 2 clients in the base case
+            if tier_id not in lst_replies:
+                continue
+            lst_model_updates = lst_replies[tier_id][0]
+            lst_parties = lst_replies[tier_id][1]
 
-            # 3. calculate shapley value for each client
-            # Note: using normalized aggregation since we delete
-            # 2 clients in the base case
-            for lst_model_updates, lst_parties in lst_model_updates[tier_id]:
-                # party_parameter = parties[tier_id][party_id]
-                for i in range(len(lst_model_updates)):
-                    party_parameter = lst_model_updates[i]
-                    party_id = lst_parties[i]
-                    normalized_parameter = aggregated_model_paramter - party_parameter
+            for i in range(len(lst_model_updates)):
+                party_parameter = lst_model_updates[i]
+                party_parameter = self.fusion_collected_responses(modelUpdates=copy.deepcopy(party_parameter))
+                party_id = lst_parties[i]
+                normalized_parameter = aggregated_model_paramter - party_parameter
 
-                    aggregation_weight = self.cal_aggregation_weight(lst_parties=lst_parties)
-                    shapley_value = -loss * aggregation_weight * normalized_parameter
-                    shapley_value_for_each_party[tier_id][party_id] = shapley_value
+                aggregation_weight = self.cal_aggregation_weight(lst_parties=lst_parties)
+                gradients_flatten = self.flatten_list_of_numpy(gradients)
+                normalized_parameter_flatten = self.flatten_list_of_numpy(normalized_parameter)
+                if len(gradients_flatten) != len(normalized_parameter_flatten):
+                    raise ValueError('parameter size is not the same for calculating shapley value')
+
+                shapley_value = - (1/test_data_points_num) * aggregation_weight * np.dot(gradients_flatten, normalized_parameter_flatten)
+                shapley_value_for_each_party[tier_id][party_id] = shapley_value
         
         return shapley_value_for_each_party
 
+    def fusion_collected_responses(self, modelUpdates, key='weights'):
+        """
+        Receives a model updates, where a model update is of the type
+        `ModelUpdate`, using the values (indicating by the key)
+        included in each model_update, it finds the mean.
 
+        :param modelUpdates: A model updates of type `ModelUpdate` \
+        to be averaged.
+        :type modelUpdates:  `ModelUpdate`
+        :param key: A key indicating what values the method will aggregate over.
+        :type key: `str`
+        :return: results after aggregation
+        :rtype: `list`
+        """        
+        results = None
+        try:
+            results = np.array(modelUpdates.get(key))
+        except Exception as ex:
+            results = IterAvgFusionHandler.transform_update_to_np_array(modelUpdates.get(key))
+
+        return results
 
     def update_weights(self, lst_model_updates):
         """
@@ -394,8 +468,6 @@ class TierIterAvgFusionHandler(IterAvgFusionHandler):
                 updated_weights = self.fusion_collected_responses_by_tier(lst_model_updates[tier_id])
                 for tier_id in range(self.current_tiers):
                     self.current_model_weights_per_tier[tier_id] = updated_weights
-        
-        # shapley_value_for_each_party = self.cal_shapley_value(lst_model_updates)
 
 
     def fusion_collected_responses_by_tier(self, modelUpdates, key='weights'):

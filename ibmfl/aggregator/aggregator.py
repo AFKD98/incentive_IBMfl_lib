@@ -50,10 +50,11 @@ class Aggregator(object):
         configure_logging_from_file()
 
         cls_config = get_aggregator_config(**kwargs)
-
+        print(f'cls_config: {cls_config}')
         self.data_handler = None
         self.fl_model = None
         self.fl_models = []
+        self.shapley_value_test_model = None
 
         data_config = cls_config.get('data')
         model_config = cls_config.get('model')
@@ -84,6 +85,9 @@ class Aggregator(object):
                 for i in range(0, number_of_tiers):
                     self.fl_models.append(model_cls_ref('', spec, info=model_info))
                 self.fl_model = self.fl_models[0]
+
+                self.shapley_value_test_model = model_cls_ref('', spec, info=model_info)
+            print(f'self.fl_models: {self.fl_models}')
             # Load hyperparams
             self.hyperparams = cls_config.get('hyperparams')
             connection_cls_ref = connection_config.get('cls_ref')
@@ -121,6 +125,7 @@ class Aggregator(object):
                                          self.proto_handler,
                                          data_handler=self.data_handler,
                                          fl_models=self.fl_models,
+                                         shapley_value_test_model=self.shapley_value_test_model,
                                          evidencia=self.evidencia,
                                          info=fusion_info)
             if mh_config:

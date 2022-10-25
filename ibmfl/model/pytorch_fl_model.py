@@ -319,7 +319,8 @@ class PytorchFLModel(FLModel):
         y_pred = self.predict(x)
         y_pred_exp = np.exp(y_pred)
         y_pred_argmax = np.argmax(y_pred_exp, axis=1)
-
+        logger.info(f'party pytorch model metric_names, eval_metrics: {metric_names}, {eval_metrics}')
+        # print()
         try:
             metric_dict = dict(zip(metric_names, eval_metrics))
             # NOTE: Had to replace comprehension with for loop to tackle loss fn case which uses y_pred not argmax

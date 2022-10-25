@@ -12,7 +12,7 @@ connection:
   sync: false
 data:
   info:
-    npz_file: examples/data/mnist/random/data_party1.npz
+    npz_file: examples/data/mnist/balanced/data_party1.npz
   name: MnistPytorchDataHandler
   path: ibmfl.util.data_handlers.mnist_pytorch_data_handler
 local_training:

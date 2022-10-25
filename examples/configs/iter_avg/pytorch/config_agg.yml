@@ -15,7 +15,6 @@ model:
     model_definition: examples/configs/iter_avg/pytorch/pytorch_sequence.pt
     model_name: pytorch-nn
     optimizer: optim.Adadelta
-
 data:
   info:
     npz_file: examples/datasets/mnist.npz

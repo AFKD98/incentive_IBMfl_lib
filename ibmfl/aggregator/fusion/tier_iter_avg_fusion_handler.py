@@ -414,7 +414,7 @@ class TierIterAvgFusionHandler(IterAvgFusionHandler):
                 party_parameter = lst_model_updates[i]
                 party_parameter = self.fusion_collected_responses(modelUpdates=copy.deepcopy(party_parameter))
                 party_id = lst_parties[i]
-                normalized_parameter = aggregated_model_paramter - party_parameter
+                normalized_parameter = party_parameter - aggregated_model_paramter
 
                 aggregation_weight = self.cal_aggregation_weight(lst_parties=lst_parties)
                 gradients_flatten = self.flatten_list_of_numpy(gradients)
